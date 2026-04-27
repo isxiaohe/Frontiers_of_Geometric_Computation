@@ -1,0 +1,33 @@
+[project]
+name = "homework3"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pyyaml",
+    "matplotlib",
+    "h5py",
+    "tqdm",
+    "einops>=0.6.1",
+    "wandb",
+]
+
+[project.optional-dependencies]
+# Mac (CPU/MPS) — default PyTorch with no CUDA
+mac = [
+    "torch>=2.0",
+]
+# CUDA 12.8 — must install with:
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+cuda = [
+    "torch>=2.0",
+]
+dev = [
+    "ipykernel",
+]
+
+[tool.uv]
+# Don't auto-install torch via uv — let the user pick the right wheel:
+#   Mac:      uv sync --extra mac
+#   CUDA:     uv sync --extra cuda && uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+no-build-isolation-package = ["torch"]

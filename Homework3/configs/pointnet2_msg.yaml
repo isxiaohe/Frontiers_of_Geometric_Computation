@@ -1,0 +1,17 @@
+model: pointnet2_msg
+num_points: 1024
+num_classes: 40
+batch_size: 16
+epochs: 200
+lr: 0.001
+weight_decay: 0.0001
+optimizer: adam
+scheduler: cosine
+use_normals: false
+num_workers: 4
+data_root: datasets/modelnet40_hdf5_2048
+
+wandb:
+  project: pointnet2-modelnet40
+  mode: offline
+  name: msg

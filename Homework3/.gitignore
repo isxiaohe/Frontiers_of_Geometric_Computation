@@ -1,1 +1,7 @@
 datasets/
+wandb/
+checkpoints/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/

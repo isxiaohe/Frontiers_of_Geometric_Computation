@@ -17,6 +17,8 @@ Homework3/
 ├── cuda_ops/                    # Custom CUDA kernels (user-written)
 │   ├── setup.py                 # torch.utils.cpp_extension build
 │   ├── csrc/
+│   │   ├── api.cpp              # PyTorch extension bindings (TORCH_LIBRARY)
+│   │   ├── cuda_utils.h         # CUDA_CHECK macros, common utilities
 │   │   ├── ball_query.cpp       # C++/CUDA dispatch
 │   │   ├── ball_query_cuda.cu
 │   │   ├── fps.cpp
