@@ -1,0 +1,6 @@
+[submodule "Homework3/submodules/pointnext"]
+	path = Homework3/submodules/pointnext
+	url = https://github.com/kentechx/pointnext.git
+[submodule "Homework3/submodules/pointnet2"]
+	path = Homework3/submodules/pointnet2
+	url = https://github.com/charlesq34/pointnet2.git
