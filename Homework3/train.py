@@ -120,7 +120,8 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=config["lr"],
                                weight_decay=config.get("weight_decay", 1e-4))
     scheduler = CosineAnnealingLR(optimizer, T_max=config["epochs"])
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(
+        label_smoothing=config.get("label_smoothing", 0.0))
 
     # Wandb (local)
     wb = config.get("wandb", {})

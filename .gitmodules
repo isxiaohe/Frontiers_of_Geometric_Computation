@@ -4,3 +4,12 @@
 [submodule "Homework3/submodules/pointnet2"]
 	path = Homework3/submodules/pointnet2
 	url = https://github.com/charlesq34/pointnet2.git
+[submodule "Homework3/submodules/openpoints"]
+	path = Homework3/submodules/openpoints
+	url = https://github.com/guochengqian/openpoints.git
+[submodule "Homework3/submodules/PointNeXt"]
+	path = Homework3/submodules/PointNeXt
+	url = https://github.com/guochengqian/PointNeXt.git
+[submodule "Homework3/submodules/pointnext2"]
+	path = Homework3/submodules/pointnext2
+	url = https://github.com/guochengqian/PointNeXt.git
