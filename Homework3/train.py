@@ -13,7 +13,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 from tqdm import tqdm
 import wandb
 
@@ -42,7 +42,8 @@ def get_model(config):
         raise ValueError(f"Unknown model: {name}")
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device, epoch, total_epochs):
+def train_one_epoch(model, loader, criterion, optimizer, device, epoch, total_epochs,
+                    grad_norm_clip=0):
     model.train()
     total_loss, correct, total = 0.0, 0, 0
 
@@ -55,6 +56,8 @@ def train_one_epoch(model, loader, criterion, optimizer, device, epoch, total_ep
         logits = model(points)
         loss = criterion(logits, labels)
         loss.backward()
+        if grad_norm_clip > 0:
+            nn.utils.clip_grad_norm_(model.parameters(), grad_norm_clip)
         optimizer.step()
 
         total_loss += loss.item() * points.size(0)
@@ -112,14 +115,28 @@ def main():
     print(f"Model: {config['model']}  |  Params: {num_params:,}")
 
     # Optimizer
-    opt_name = config.get("optimizer", "adam")
+    opt_name = config.get("optimizer", "adam").lower()
     if opt_name == "adamw":
         optimizer = optim.AdamW(model.parameters(), lr=config["lr"],
                                 weight_decay=config.get("weight_decay", 1e-4))
+    elif opt_name == "sgd":
+        optimizer = optim.SGD(model.parameters(), lr=config["lr"],
+                              momentum=0.9,
+                              weight_decay=config.get("weight_decay", 1e-4))
     else:
         optimizer = optim.Adam(model.parameters(), lr=config["lr"],
                                weight_decay=config.get("weight_decay", 1e-4))
-    scheduler = CosineAnnealingLR(optimizer, T_max=config["epochs"])
+
+    # Scheduler
+    sched_name = config.get("scheduler", "cosine").lower()
+    if sched_name == "step":
+        scheduler = StepLR(optimizer,
+                           step_size=config.get("step_size", 20),
+                           gamma=config.get("decay_rate", 0.7))
+    else:
+        scheduler = CosineAnnealingLR(optimizer, T_max=config["epochs"])
+
+    grad_norm_clip = config.get("grad_norm_clip", 0)
     criterion = nn.CrossEntropyLoss(
         label_smoothing=config.get("label_smoothing", 0.0))
 
@@ -145,7 +162,8 @@ def main():
         t0 = time.time()
 
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, device, epoch, total_epochs)
+            model, train_loader, criterion, optimizer, device, epoch, total_epochs,
+            grad_norm_clip)
         test_loss, test_acc = evaluate(
             model, test_loader, criterion, device, epoch, total_epochs)
         scheduler.step()

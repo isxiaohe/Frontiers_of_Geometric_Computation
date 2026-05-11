@@ -3,10 +3,12 @@ num_points: 1024
 num_classes: 40
 batch_size: 16
 epochs: 200
-lr: 0.001
+lr: 0.01
 weight_decay: 0.0001
-optimizer: adam
-scheduler: cosine
+optimizer: sgd
+scheduler: step
+step_size: 20
+decay_rate: 0.7
 use_normals: false
 num_workers: 4
 data_root: datasets/modelnet40_hdf5_2048
