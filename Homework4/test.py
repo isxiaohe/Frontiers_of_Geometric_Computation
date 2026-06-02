@@ -41,11 +41,24 @@ def extract_mesh(model, bbox_min, bbox_max, resolution=128, device="cpu", batch_
     sdf_values = np.concatenate(sdf_values, axis=0).reshape(resolution, resolution, resolution)
 
     # Marching Cubes在sdf=0处提取mesh
+    sdf_min = sdf_values.min()
+    sdf_max = sdf_values.max()
+    print(f"SDF field range: [{sdf_min:.4f}, {sdf_max:.4f}]")
+
+    level = 0.0
+    if not (sdf_min <= level <= sdf_max):
+        print(f"WARNING: level={level} is outside SDF range. Auto-adjusting to midpoint.")
+        level = (sdf_min + sdf_max) / 2.0
+        print(f"Using iso-level: {level:.4f}")
+
     try:
-        vertices, faces, normals, _ = marching_cubes(sdf_values, level=0)
-    except ValueError:
-        # 如果level=0不在范围内，尝试level=0.0但用allow_degenerate
-        vertices, faces, normals, _ = marching_cubes(sdf_values, level=0)
+        vertices, faces, normals, _ = marching_cubes(sdf_values, level=level)
+    except ValueError as e:
+        print(f"ERROR: Marching Cubes failed: {e}")
+        print("This usually means the model is not trained enough (SDF field doesn't cross zero).")
+        # Return an empty mesh as fallback
+        mesh = trimesh.Trimesh(vertices=np.zeros((0, 3)), faces=np.zeros((0, 3)))
+        return mesh
 
     # 将顶点坐标从voxel空间映射回世界坐标
     scale = (bbox_max - bbox_min) / (resolution - 1)
@@ -74,12 +87,14 @@ def test(args):
     model_args = ckpt.get("args", {})
 
     # 从checkpoint恢复模型参数
-    hidden_dim = model_args.get("hidden_dim", 256)
-    num_layers = model_args.get("num_layers", 8)
+    hidden_dim = model_args.get("hidden_dim", 512)
+    num_layers = model_args.get("num_layers", 10)
     activation = model_args.get("activation", "relu")
-    skip_layers = model_args.get("skip_layers", [4])
-    mapping_size = model_args.get("mapping_size", 10)
-    sigma = model_args.get("sigma", 10.0)
+    skip_layers = model_args.get("skip_layers", [5])
+    mapping_size = model_args.get("mapping_size", 64)
+    sigma = model_args.get("sigma", 5.0)
+    geometric_init = model_args.get("geometric_init", True)
+    radius_init = model_args.get("radius_init", 1.0)
 
     if args.mode == "base":
         model = SDFMLP(
@@ -88,6 +103,8 @@ def test(args):
             num_layers=num_layers,
             activation=activation,
             skip_layers=skip_layers,
+            geometric_init=geometric_init,
+            radius_init=radius_init,
         ).to(device)
     elif args.mode == "fourier":
         model = FourierFeatureMLP(
@@ -98,6 +115,8 @@ def test(args):
             skip_layers=skip_layers,
             mapping_size=mapping_size,
             sigma=sigma,
+            geometric_init=geometric_init,
+            radius_init=radius_init,
         ).to(device)
     else:
         raise ValueError(f"Unknown mode: {args.mode}")

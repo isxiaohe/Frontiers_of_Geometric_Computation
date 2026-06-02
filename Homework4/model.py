@@ -4,21 +4,29 @@ import numpy as np
 
 
 class SDFMLP(nn.Module):
-    """基础MLP模型，输入3D坐标，输出1D SDF值。"""
+    """基础MLP模型，输入3D坐标，输出1D SDF值。
+
+    参考IGR [Gropp et al., ICML 2020] 实现 geometric initialization
+    和 skip connection 缩放，提升训练稳定性和收敛速度。
+    """
 
     def __init__(
         self,
         in_dim=3,
-        hidden_dim=256,
-        num_layers=8,
+        hidden_dim=512,
+        num_layers=10,
         activation="relu",
-        skip_layers=[4],
+        skip_layers=[5],
+        geometric_init=True,
+        radius_init=1.0,
     ):
         super().__init__()
         self.in_dim = in_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.skip_layers = skip_layers
+        self.geometric_init = geometric_init
+        self.radius_init = radius_init
 
         if activation == "relu":
             self.act = nn.ReLU(inplace=True)
@@ -39,7 +47,10 @@ class SDFMLP(nn.Module):
         self.output_layer = nn.Linear(hidden_dim, 1)
 
         # 初始化权重
-        self._init_weights()
+        if geometric_init:
+            self._geometric_init_weights()
+        else:
+            self._init_weights()
 
     def _init_weights(self):
         for layer in self.layers:
@@ -47,6 +58,23 @@ class SDFMLP(nn.Module):
             nn.init.zeros_(layer.bias)
         nn.init.xavier_uniform_(self.output_layer.weight)
         nn.init.zeros_(self.output_layer.bias)
+
+    def _geometric_init_weights(self):
+        """IGR 风格几何初始化：让网络初始近似一个球面 SDF。"""
+        # 隐藏层使用 He 初始化
+        for layer in self.layers:
+            nn.init.constant_(layer.bias, 0.0)
+            out_dim = layer.weight.shape[0]
+            nn.init.normal_(layer.weight, mean=0.0, std=np.sqrt(2) / np.sqrt(out_dim))
+
+        # 输出层：让初始输出接近 sphere SDF = |x| - radius_init
+        # 这样初始零等值面为半径 radius_init 的球
+        nn.init.normal_(
+            self.output_layer.weight,
+            mean=np.sqrt(np.pi) / np.sqrt(self.output_layer.weight.shape[1]),
+            std=1e-5,
+        )
+        nn.init.constant_(self.output_layer.bias, -self.radius_init)
 
     def forward(self, x):
         """
@@ -58,7 +86,8 @@ class SDFMLP(nn.Module):
         h = x
         for i, layer in enumerate(self.layers):
             if i in self.skip_layers:
-                h = torch.cat([h, x], dim=-1)
+                # 参考IGR：skip connection 除以 sqrt(2) 保持方差稳定
+                h = torch.cat([h, x], dim=-1) / np.sqrt(2)
             h = layer(h)
             if self.act is torch.sin:
                 h = self.act(h)
@@ -69,17 +98,23 @@ class SDFMLP(nn.Module):
 
 
 class FourierFeatureMLP(nn.Module):
-    """Fourier Feature位置编码 + MLP。"""
+    """Fourier Feature位置编码 + MLP。
+
+    参考 "Fourier Features Let Networks Learn High Frequency Functions
+    in Low Dimensional Domains" (Tancik et al., NeurIPS 2020)
+    """
 
     def __init__(
         self,
         in_dim=3,
-        hidden_dim=256,
-        num_layers=8,
+        hidden_dim=512,
+        num_layers=10,
         activation="relu",
-        skip_layers=[4],
-        mapping_size=10,
-        sigma=10.0,
+        skip_layers=[5],
+        mapping_size=64,
+        sigma=5.0,
+        geometric_init=True,
+        radius_init=1.0,
     ):
         super().__init__()
         self.in_dim = in_dim
@@ -96,6 +131,8 @@ class FourierFeatureMLP(nn.Module):
             num_layers=num_layers,
             activation=activation,
             skip_layers=skip_layers,
+            geometric_init=geometric_init,
+            radius_init=radius_init,
         )
 
     def fourier_features(self, x):
@@ -105,7 +142,6 @@ class FourierFeatureMLP(nn.Module):
         Returns:
             feat: (B, 2 * mapping_size)
         """
-        # x @ B: (B, mapping_size)
         proj = 2 * np.pi * (x @ self.B)
         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
 
