@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from skimage.measure import marching_cubes
 import trimesh
+from tqdm import tqdm
 
 from model import SDFMLP, FourierFeatureMLP
 from dataset import SDFDataset
@@ -30,8 +31,9 @@ def extract_mesh(model, bbox_min, bbox_max, resolution=128, device="cpu", batch_
 
     # batch推理
     sdf_values = []
+    total_batches = (grid_points.shape[0] + batch_size - 1) // batch_size
     with torch.no_grad():
-        for i in range(0, grid_points.shape[0], batch_size):
+        for i in tqdm(range(0, grid_points.shape[0], batch_size), total=total_batches, desc="Inference", ncols=100):
             batch_pts = torch.from_numpy(grid_points[i:i + batch_size]).to(device)
             batch_sdf = model(batch_pts).cpu().numpy()
             sdf_values.append(batch_sdf)

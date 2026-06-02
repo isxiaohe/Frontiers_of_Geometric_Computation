@@ -5,6 +5,7 @@ import json
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from model import SDFMLP, FourierFeatureMLP
 from dataset import SDFDataset
@@ -71,13 +72,14 @@ def train(args):
     model.train()
     start_time = time.time()
 
-    for epoch in range(1, args.epochs + 1):
+    pbar = tqdm(range(1, args.epochs + 1), desc="Training", ncols=100)
+    for epoch in pbar:
         epoch_loss = 0.0
         epoch_sdf_loss = 0.0
         epoch_grad_loss = 0.0
         num_batches = 0
 
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch}", leave=False, ncols=100):
             points = batch["points"].to(device)
             grad_gt = batch["grad"].to(device)
             sdf_gt = batch["sdf"].to(device)
@@ -112,6 +114,13 @@ def train(args):
             "sdf_loss": avg_sdf_loss,
             "grad_loss": avg_grad_loss,
             "lr": scheduler.get_last_lr()[0],
+        })
+
+        pbar.set_postfix({
+            "loss": f"{avg_loss:.6f}",
+            "sdf": f"{avg_sdf_loss:.6f}",
+            "grad": f"{avg_grad_loss:.6f}",
+            "lr": f"{scheduler.get_last_lr()[0]:.6f}",
         })
 
         if epoch % args.log_interval == 0 or epoch == 1:
