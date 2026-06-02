@@ -13,3 +13,6 @@
 [submodule "Homework3/submodules/pointnext2"]
 	path = Homework3/submodules/pointnext2
 	url = https://github.com/guochengqian/PointNeXt.git
+[submodule "Homework3/submodules/Muon"]
+	path = Homework3/submodules/Muon
+	url = https://github.com/KellerJordan/Muon
