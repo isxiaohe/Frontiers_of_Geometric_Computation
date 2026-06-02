@@ -3,6 +3,21 @@ import torch.nn as nn
 import numpy as np
 
 
+class GaussianFourierFeatureTransform(nn.Module):
+    """随机高斯傅里叶特征映射。"""
+
+    def __init__(self, in_dim=3, mapping_size=64, sigma=5.0):
+        super().__init__()
+        self.in_dim = in_dim
+        self.mapping_size = mapping_size
+        B = torch.randn(in_dim, mapping_size) * sigma
+        self.register_buffer("B", B)
+
+    def forward(self, x):
+        proj = 2 * np.pi * (x @ self.B)
+        return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+
+
 class SDFMLP(nn.Module):
     """基础MLP模型，输入3D坐标，输出1D SDF值。
 
@@ -17,6 +32,7 @@ class SDFMLP(nn.Module):
         num_layers=10,
         activation="relu",
         skip_layers=[5],
+        fourier_transform=None,
         geometric_init=True,
         radius_init=1.0,
     ):
@@ -25,6 +41,7 @@ class SDFMLP(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.skip_layers = skip_layers
+        self.fourier_transform = fourier_transform
         self.geometric_init = geometric_init
         self.radius_init = radius_init
 
@@ -83,6 +100,9 @@ class SDFMLP(nn.Module):
         Returns:
             sdf: (B, 1) SDF值
         """
+        if self.fourier_transform is not None:
+            x = self.fourier_transform(x)
+
         h = x
         for i, layer in enumerate(self.layers):
             if i in self.skip_layers:
@@ -117,34 +137,17 @@ class FourierFeatureMLP(nn.Module):
         radius_init=1.0,
     ):
         super().__init__()
-        self.in_dim = in_dim
-        self.mapping_size = mapping_size
-        self.sigma = sigma
-
-        # 随机高斯矩阵 B: (in_dim, mapping_size)
-        B = torch.randn(in_dim, mapping_size) * sigma
-        self.register_buffer("B", B)
-
+        fourier = GaussianFourierFeatureTransform(in_dim, mapping_size, sigma)
         self.mlp = SDFMLP(
             in_dim=2 * mapping_size,
             hidden_dim=hidden_dim,
             num_layers=num_layers,
             activation=activation,
             skip_layers=skip_layers,
+            fourier_transform=fourier,
             geometric_init=geometric_init,
             radius_init=radius_init,
         )
 
-    def fourier_features(self, x):
-        """
-        Args:
-            x: (B, in_dim)
-        Returns:
-            feat: (B, 2 * mapping_size)
-        """
-        proj = 2 * np.pi * (x @ self.B)
-        return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
-
     def forward(self, x):
-        feat = self.fourier_features(x)
-        return self.mlp(feat)
+        return self.mlp(x)

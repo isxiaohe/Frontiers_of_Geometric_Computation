@@ -7,13 +7,14 @@ from skimage.measure import marching_cubes
 import trimesh
 from tqdm import tqdm
 
-from model import SDFMLP, FourierFeatureMLP
-from dataset import SDFDataset
+from model import SDFMLP, GaussianFourierFeatureTransform
+from dataset import RecDataset
 
 
-def extract_mesh(model, bbox_min, bbox_max, resolution=128, device="cpu", batch_size=65536):
+def extract_mesh(model, bbox_min, bbox_max, resolution=256, device="cpu", level=0.005):
     """
     在bbox内生成均匀网格，推理SDF，使用Marching Cubes提取mesh。
+    每z-slice作为一个batch，batch_size = resolution^2。
     """
     model.eval()
 
@@ -26,26 +27,29 @@ def extract_mesh(model, bbox_min, bbox_max, resolution=128, device="cpu", batch_
     x = np.linspace(bbox_min[0], bbox_max[0], resolution)
     y = np.linspace(bbox_min[1], bbox_max[1], resolution)
     z = np.linspace(bbox_min[2], bbox_max[2], resolution)
-    xx, yy, zz = np.meshgrid(x, y, z, indexing="ij")
-    grid_points = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=-1).astype(np.float32)
 
-    # batch推理
-    sdf_values = []
-    total_batches = (grid_points.shape[0] + batch_size - 1) // batch_size
+    batch_size = resolution ** 2
+    sdf_values = np.zeros((resolution, resolution, resolution), dtype=np.float32)
+
     with torch.no_grad():
-        for i in tqdm(range(0, grid_points.shape[0], batch_size), total=total_batches, desc="Inference", ncols=100):
-            batch_pts = torch.from_numpy(grid_points[i:i + batch_size]).to(device)
-            batch_sdf = model(batch_pts).cpu().numpy()
-            sdf_values.append(batch_sdf)
+        for zi in tqdm(range(resolution), desc="Slices", ncols=100):
+            xx, yy = np.meshgrid(x, y, indexing="ij")
+            zz = np.full_like(xx, z[zi])
+            grid_points = np.stack([xx.ravel(), yy.ravel(), zz.ravel()], axis=-1).astype(np.float32)
 
-    sdf_values = np.concatenate(sdf_values, axis=0).reshape(resolution, resolution, resolution)
+            slice_sdf = []
+            for i in range(0, grid_points.shape[0], batch_size):
+                batch_pts = torch.from_numpy(grid_points[i:i + batch_size]).to(device)
+                batch_sdf = model(batch_pts).cpu().numpy()
+                slice_sdf.append(batch_sdf)
 
-    # Marching Cubes在sdf=0处提取mesh
+            sdf_values[:, :, zi] = np.concatenate(slice_sdf, axis=0).reshape(resolution, resolution)
+
+    # Marching Cubes在指定level处提取mesh
     sdf_min = sdf_values.min()
     sdf_max = sdf_values.max()
     print(f"SDF field range: [{sdf_min:.4f}, {sdf_max:.4f}]")
 
-    level = 0.0
     if not (sdf_min <= level <= sdf_max):
         print(f"WARNING: level={level} is outside SDF range. Auto-adjusting to midpoint.")
         level = (sdf_min + sdf_max) / 2.0
@@ -74,29 +78,62 @@ def test(args):
     print(f"Using device: {device}")
 
     data_dir = os.path.join(args.data_root, args.uid)
-    dataset = SDFDataset(data_dir)
+    dataset = RecDataset(data_dir, mode=args.mode, sample_size=1)
     bbox_min = dataset.bbox_min
     bbox_max = dataset.bbox_max
 
     # 加载模型
-    ckpt_path = os.path.join(args.checkpoint_dir, f"{args.uid}_{args.mode}.pt")
+    model_tag = f"{args.mode}{'_fourier' if args.use_fourier else ''}"
+    ckpt_path = os.path.join(args.checkpoint_dir, f"{args.uid}_{model_tag}.pt")
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
     ckpt = torch.load(ckpt_path, map_location=device)
-    model_args = ckpt.get("args", {})
+
+    # 支持两种checkpoint格式
+    if isinstance(ckpt, dict):
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            model_args = ckpt.get("args", {})
+        else:
+            # 直接保存的state_dict
+            state_dict = ckpt
+            model_args = {}
+    else:
+        # 直接保存的模型对象（罕见）
+        if hasattr(ckpt, "state_dict"):
+            state_dict = ckpt.state_dict()
+            model_args = {}
+        else:
+            state_dict = ckpt
+            model_args = {}
 
     # 从checkpoint恢复模型参数
     hidden_dim = model_args.get("hidden_dim", 512)
     num_layers = model_args.get("num_layers", 10)
     activation = model_args.get("activation", "relu")
     skip_layers = model_args.get("skip_layers", [5])
-    mapping_size = model_args.get("mapping_size", 64)
-    sigma = model_args.get("sigma", 5.0)
     geometric_init = model_args.get("geometric_init", True)
     radius_init = model_args.get("radius_init", 1.0)
+    use_fourier = model_args.get("use_fourier", False)
+    mapping_size = model_args.get("mapping_size", 64)
+    sigma = model_args.get("sigma", 5.0)
 
-    if args.mode == "base":
+    if use_fourier:
+        fourier_transform = GaussianFourierFeatureTransform(
+            in_dim=3, mapping_size=mapping_size, sigma=sigma
+        )
+        model = SDFMLP(
+            in_dim=2 * mapping_size,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            activation=activation,
+            skip_layers=skip_layers,
+            fourier_transform=fourier_transform,
+            geometric_init=geometric_init,
+            radius_init=radius_init,
+        ).to(device)
+    else:
         model = SDFMLP(
             in_dim=3,
             hidden_dim=hidden_dim,
@@ -106,23 +143,9 @@ def test(args):
             geometric_init=geometric_init,
             radius_init=radius_init,
         ).to(device)
-    elif args.mode == "fourier":
-        model = FourierFeatureMLP(
-            in_dim=3,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            activation=activation,
-            skip_layers=skip_layers,
-            mapping_size=mapping_size,
-            sigma=sigma,
-            geometric_init=geometric_init,
-            radius_init=radius_init,
-        ).to(device)
-    else:
-        raise ValueError(f"Unknown mode: {args.mode}")
 
-    model.load_state_dict(ckpt["model_state_dict"])
-    print(f"Loaded checkpoint from epoch {ckpt['epoch']}")
+    model.load_state_dict(state_dict)
+    print("Loaded checkpoint")
 
     # 提取mesh
     print(f"Extracting mesh with resolution {args.resolution}...")
@@ -133,15 +156,23 @@ def test(args):
         bbox_max,
         resolution=args.resolution,
         device=device,
-        batch_size=args.batch_size,
+        level=args.level,
     )
     elapsed = time.time() - start_time
     print(f"Mesh extraction done in {elapsed:.1f}s")
-    print(f"Vertices: {len(mesh.vertices)}, Faces: {len(mesh.faces)}")
+
+    if args.clean_mesh:
+        print("Cleaning mesh: keeping largest connected component...")
+        components = mesh.split(only_watertight=False)
+        if len(components) > 0:
+            mesh = max(components, key=lambda c: len(c.vertices))
+        print(f"Cleaned mesh - Vertices: {len(mesh.vertices)}, Faces: {len(mesh.faces)}")
+    else:
+        print(f"Vertices: {len(mesh.vertices)}, Faces: {len(mesh.faces)}")
 
     # 保存结果
     os.makedirs(args.result_dir, exist_ok=True)
-    result_path = os.path.join(args.result_dir, f"{args.uid}_{args.mode}.obj")
+    result_path = os.path.join(args.result_dir, f"{args.uid}_{model_tag}.obj")
     mesh.export(result_path)
     print(f"Saved mesh to: {result_path}")
 
@@ -154,7 +185,13 @@ def test(args):
 
 def test_all(args):
     """测试所有shape。"""
-    uids = sorted([d for d in os.listdir(args.data_root) if os.path.isdir(os.path.join(args.data_root, d))])
+    uids = sorted(
+        [
+            d
+            for d in os.listdir(args.data_root)
+            if os.path.isdir(os.path.join(args.data_root, d))
+        ]
+    )
     print(f"Found {len(uids)} shapes: {uids}")
     for uid in uids:
         print(f"\n{'='*60}")
@@ -167,12 +204,34 @@ def test_all(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test Neural SDF per shape")
     parser.add_argument("--data_root", type=str, default="data", help="数据根目录")
-    parser.add_argument("--uid", type=str, default=None, help="指定测试单个shape的uid，不指定则测试所有")
-    parser.add_argument("--mode", type=str, default="base", choices=["base", "fourier"], help="测试模式")
-    parser.add_argument("--resolution", type=int, default=128, help="Marching Cubes网格分辨率")
-    parser.add_argument("--batch_size", type=int, default=65536, help="推理批次大小")
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", help="模型检查点目录")
-    parser.add_argument("--result_dir", type=str, default="results", help="结果保存目录")
+    parser.add_argument(
+        "--uid", type=str, default=None, help="指定测试单个shape的uid，不指定则测试所有"
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="mixed",
+        choices=["sdf", "surface", "mixed"],
+        help="数据采样模式（与训练一致）",
+    )
+    parser.add_argument(
+        "--resolution", type=int, default=256, help="Marching Cubes网格分辨率"
+    )
+    parser.add_argument(
+        "--level", type=float, default=0.005, help="Marching Cubes等值面level"
+    )
+    parser.add_argument(
+        "--use_fourier", action="store_true", help="是否加载Fourier feature模型"
+    )
+    parser.add_argument(
+        "--clean_mesh", action="store_true", help="是否清理mesh，只保留最大连通组件"
+    )
+    parser.add_argument(
+        "--checkpoint_dir", type=str, default="checkpoints", help="模型检查点目录"
+    )
+    parser.add_argument(
+        "--result_dir", type=str, default="results", help="结果保存目录"
+    )
 
     args = parser.parse_args()
 
