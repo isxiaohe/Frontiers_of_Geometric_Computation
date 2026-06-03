@@ -215,7 +215,6 @@ uv run python benchmark.py --device cuda
 | Final train loss | 0.1433 | 1.2608 |
 | Final test loss | 0.4905 | 1.4215 |
 
-注: PointNeXt-S 的 loss 数值高于 PointNet++ SSG 是因为使用了 label smoothing=0.2. Label smoothing 将 one-hot 标签软化为均匀分布, 使交叉熵的理论下限从 0 提升到约 0.23, 因此不能直接比较两个模型的 loss 绝对值. 尽管数值更大, label smoothing 起到了正则化作用, 使模型泛化更好 (test acc 92.4% vs 87.4%).
 
 Accuracy 曲线:
 
@@ -230,7 +229,7 @@ Loss 曲线:
 1. 收敛速度: PointNet++ SSG 收敛更快, ~epoch 23 即达到最终 test acc 的 90%; PointNeXt-S 需要约 60 epochs 才达到同样比例, 但持续提升, 到 200 epoch 时两个模型都已接近收敛
 2. 过拟合: PointNet++ SSG 的 train-test acc 差距约 8% (95.2% vs 87.4%), 而 PointNeXt-S 的差距约 7% (99.2% vs 92.4%), 两者过拟合程度相近
 3. 最终性能: PointNeXt-S 比 PointNet++ SSG 高出约 5 个百分点, 这主要归功于 InvResMLP 残差结构, AdamW + CosineAnnealing 优化策略, 以及 label smoothing 的正则化效果
-4. 与论文差距: 我们的结果低于论文报告值约 2-3 个百分点, 可能原因包括:
+4. 与论文差距(分别为 91 % 和 93 %): 我们的结果低于论文报告值约 2-3 个百分点, 可能原因包括:
    - 训练 epoch 不够 (论文 PointNeXt 用 600 epochs)
    - 缺少 stochastic depth / EMA 等训练技巧
    - 架构实现与原版存在细节差异 (如 SA 层的 MLP 配置, head 结构等)

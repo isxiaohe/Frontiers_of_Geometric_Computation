@@ -123,6 +123,22 @@ def main():
         optimizer = optim.SGD(model.parameters(), lr=config["lr"],
                               momentum=0.9,
                               weight_decay=config.get("weight_decay", 1e-4))
+    elif opt_name == "muon":
+        sys.path.insert(0, "submodules/Muon")
+        from muon import SingleDeviceMuonWithAuxAdam
+        # Muon for 2D/4D matrix weights (Linear + Conv2d); AdamW for bias, BN, Conv1d
+        muon_params = [p for p in model.parameters() if p.ndim >= 2 and p.ndim != 3]
+        adam_params = [p for p in model.parameters() if p.ndim < 2 or p.ndim == 3]
+        param_groups = [
+            dict(params=adam_params, lr=config.get("aux_lr", config["lr"] / 10),
+                 weight_decay=config.get("weight_decay", 0),
+                 betas=(0.9, 0.95), eps=1e-10, use_muon=False),
+            dict(params=muon_params, lr=config["lr"],
+                 momentum=config.get("momentum", 0.95),
+                 weight_decay=config.get("weight_decay", 0), use_muon=True),
+        ]
+        optimizer = SingleDeviceMuonWithAuxAdam(param_groups)
+        print(f"Muon groups: {len(muon_params)} matrix params, {len(adam_params)} scalar/Conv1d params")
     else:
         optimizer = optim.Adam(model.parameters(), lr=config["lr"],
                                weight_decay=config.get("weight_decay", 1e-4))

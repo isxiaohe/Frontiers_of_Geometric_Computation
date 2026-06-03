@@ -1,91 +1,76 @@
-# Homework4 - Neural SDF Surface Reconstruction
+# Neural SDF Surface Reconstruction
 
-基于MLP的点云表面重建（Neural SDF）。
+基于 MLP 的点云隐式表面重建（Neural SDF），支持 Base MLP 与 Fourier Feature MLP 两种模式。
 
-## 环境要求
-
-- Python 3.10+
-- PyTorch
-- numpy
-- scikit-image
-- trimesh
-
-## 安装
+## 环境
 
 ```bash
-uv pip install torch numpy scikit-image trimesh
-```
-
-## 文件结构
-
-```
-model.py        # SDFMLP 基础模型 + FourierFeatureMLP 拓展模型
-dataset.py      # 加载单个 shape 的 SDF 采样数据为 PyTorch Dataset
-train.py        # 逐 shape 训练脚本，支持基础/拓展模式切换
-test.py         # 逐 shape 测试脚本，网格采样 + Marching Cubes
-utils.py        # mesh 导出、Chamfer Distance、IoU 计算等工具函数
-README.md       # 运行说明
+# Python 3.10+
+uv pip install torch numpy scikit-image trimesh tqdm
 ```
 
 ## 训练
 
-### 基础模型
-
-训练单个shape：
-```bash
-python train.py --mode base --uid 1a04e3eab45ca15dd86060f189eb133
-```
-
-训练所有shape：
-```bash
-python train.py --mode base
-```
-
-### Fourier Feature 拓展模型
+### Base MLP
 
 ```bash
-python train.py --mode fourier --uid 1a04e3eab45ca15dd86060f189eb133
+python train.py \
+  --uid <SHAPE_ID> \
+  --mode surface \
+  --num_iters 10000 \
+  --sample_size 25000 \
+  --lr 5e-4 \
+  --lambda_sdf 1.0 \
+  --lambda_grad 1.0 \
+  --lambda_eikonal 0.1 \
+  --checkpoint_dir checkpoints/base
 ```
 
-### 主要超参数
+### Fourier Feature MLP
 
-- `--hidden_dim`: 隐藏层维度（默认256）
-- `--num_layers`: 隐藏层数量（默认8）
-- `--activation`: 激活函数 relu/sine（默认relu）
-- `--batch_size`: 批次大小（默认8192）
-- `--epochs`: 训练轮数（默认2000）
-- `--lr`: 学习率（默认1e-3）
-- `--lr_decay_step`: 学习率衰减步长（默认500）
-- `--lambda_grad`: 梯度损失权重（默认0.1）
-- `--mapping_size`: Fourier feature映射维度（默认10）
-- `--sigma`: Fourier feature高斯矩阵标准差（默认10.0）
+```bash
+python train.py \
+  --uid <SHAPE_ID> \
+  --mode surface \
+  --use_fourier \
+  --num_iters 20000 \
+  --sample_size 25000 \
+  --mapping_size 64 \
+  --sigma 5.0 \
+  --lr 2e-4 \
+  --lambda_sdf 2.0 \
+  --lambda_grad 0.5 \
+  --lambda_eikonal 0.0 \
+  --checkpoint_dir checkpoints/fourier
+```
+
+> 省略 `--uid` 即可训练 `data/` 目录下的全部 shape。
 
 ## 测试
 
-### 提取Mesh
+### Base MLP
 
 ```bash
-python test.py --mode base --uid 1a04e3eab45ca15dd86060f189eb133
+python test.py \
+  --uid <SHAPE_ID> \
+  --mode surface \
+  --resolution 256 \
+  --checkpoint_dir checkpoints/base \
+  --result_dir results/base
 ```
 
-输出保存在 `results/<uid>_<mode>.obj`。
+### Fourier Feature MLP
 
-### 主要参数
+```bash
+python test.py \
+  --uid <SHAPE_ID> \
+  --mode surface \
+  --use_fourier \
+  --resolution 256 \
+  --clean_mesh \
+  --checkpoint_dir checkpoints/fourier \
+  --level 0.0001 \
+  --result_dir results/fourier
+```
 
-- `--resolution`: Marching Cubes网格分辨率（默认128）
-- `--batch_size`: 推理批次大小（默认65536）
-
-## 训练策略
-
-- 每个shape单独训练一个网络
-- 损失函数：`L = MSE(sdf_pred, sdf_gt) + λ * MSE(grad_pred, grad_gt)`
-- 优化器：Adam，lr=1e-3
-- 学习率衰减：每500 epoch衰减0.5
-- Batch size：8192
-- Epochs：2000
-
-## 结果
-
-训练和测试的日志、模型检查点分别保存在：
-- `checkpoints/`: 模型参数文件 `.pt`
-- `results/`: 重建的mesh文件 `.obj`
+> 省略 `--uid` 即可测试全部 shape。`--clean_mesh` 会保留最大连通组件，去除漂浮面片。

@@ -83,8 +83,13 @@ def test(args):
     bbox_max = dataset.bbox_max
 
     # 加载模型
-    model_tag = f"{args.mode}{'_fourier' if args.use_fourier else ''}"
-    ckpt_path = os.path.join(args.checkpoint_dir, f"{args.uid}_{model_tag}.pt")
+    if args.ckpt is not None:
+        ckpt_path = args.ckpt
+        model_tag = '_' + '_'.join(args.ckpt.split('/')[-1].split('.')[0].split('_')[1:])
+        breakpoint()
+    else:
+        model_tag = f"{args.mode}{'_fourier' if args.use_fourier else ''}"
+        ckpt_path = os.path.join(args.checkpoint_dir, f"{args.uid}_{model_tag}.pt")
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
@@ -225,6 +230,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--clean_mesh", action="store_true", help="是否清理mesh，只保留最大连通组件"
+    )
+    parser.add_argument(
+        "--ckpt", type=str, default=None, help="直接指定checkpoint文件路径（覆盖自动查找）"
     )
     parser.add_argument(
         "--checkpoint_dir", type=str, default="checkpoints", help="模型检查点目录"
