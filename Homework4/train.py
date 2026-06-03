@@ -278,11 +278,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mix_ratio", type=float, default=0.5, help="mixed模式下sdf点比例"
     )
-    parser.add_argument("--lr", type=float, default=5e-4, help="学习率")
-    parser.add_argument("--lambda_sdf", type=float, default=1.0, help="SDF损失权重")
-    parser.add_argument("--lambda_grad", type=float, default=1.0, help="梯度损失权重")
+    parser.add_argument("--lr", type=float, default=None, help="学习率 (base默认5e-4, fourier默认2e-4)")
+    parser.add_argument("--lambda_sdf", type=float, default=None, help="SDF损失权重 (base默认1.0, fourier默认2.0)")
+    parser.add_argument("--lambda_grad", type=float, default=None, help="梯度损失权重 (base默认1.0, fourier默认0.5)")
     parser.add_argument(
-        "--lambda_eikonal", type=float, default=0.1, help="Eikonal损失权重"
+        "--lambda_eikonal", type=float, default=None, help="Eikonal损失权重 (base默认0.1, fourier默认0.0)"
     )
     parser.add_argument(
         "--checkpoint_dir", type=str, default="checkpoints", help="模型保存目录"
@@ -296,6 +296,28 @@ if __name__ == "__main__":
 
     if args.no_geometric_init:
         args.geometric_init = False
+
+    # 自动设置未显式指定的参数
+    if args.use_fourier:
+        if args.lr is None:
+            args.lr = 2e-4
+        if args.lambda_sdf is None:
+            args.lambda_sdf = 2.0
+        if args.lambda_grad is None:
+            args.lambda_grad = 0.5
+        if args.lambda_eikonal is None:
+            args.lambda_eikonal = 0.0
+    else:
+        if args.lr is None:
+            args.lr = 5e-4
+        if args.lambda_sdf is None:
+            args.lambda_sdf = 1.0
+        if args.lambda_grad is None:
+            args.lambda_grad = 1.0
+        if args.lambda_eikonal is None:
+            args.lambda_eikonal = 0.1
+
+    print(f"Training config: lr={args.lr}, lambda_sdf={args.lambda_sdf}, lambda_grad={args.lambda_grad}, lambda_eikonal={args.lambda_eikonal}, geometric_init={args.geometric_init}")
 
     if args.uid is None:
         train_all(args)
