@@ -108,8 +108,8 @@ def train(args):
         sdf_pred = model(points)
         grad_pred = compute_gradient(sdf_pred, points)
 
-        loss_sdf = nn.functional.mse_loss(sdf_pred, sdf_gt)
-        loss_grad = nn.functional.mse_loss(grad_pred, grad_gt)
+        loss_sdf = torch.mean((sdf_pred - sdf_gt) ** 2)
+        loss_grad = torch.mean(torch.sum((grad_pred - grad_gt) ** 2, dim=-1))
         loss = args.lambda_sdf * loss_sdf + args.lambda_grad * loss_grad
 
         # Eikonal loss: 额外随机采样点约束 |∇F| = 1
