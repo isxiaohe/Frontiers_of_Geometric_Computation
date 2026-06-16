@@ -16,3 +16,15 @@
 [submodule "Homework3/submodules/Muon"]
 	path = Homework3/submodules/Muon
 	url = https://github.com/KellerJordan/Muon
+[submodule "Final_Project/submodules/Diffusion-SDF"]
+	path = Final_Project/submodules/Diffusion-SDF
+	url = git@github.com:ttlmh/Diffusion-SDF.git
+[submodule "Final_Project/submodules/PVD"]
+	path = Final_Project/submodules/PVD
+	url = git@github.com:alexzhou907/PVD.git
+[submodule "Final_Project/submodules/diffusion-point-cloud"]
+	path = Final_Project/submodules/diffusion-point-cloud
+	url = git@github.com:luost26/diffusion-point-cloud.git
+[submodule "Final_Project/submodules/meshflow"]
+	path = Final_Project/submodules/meshflow
+	url = org-16943930@github.com:facebookresearch/meshflow.git
