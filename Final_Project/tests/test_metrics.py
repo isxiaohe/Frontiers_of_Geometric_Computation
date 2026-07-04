@@ -30,6 +30,28 @@ class PointCloudMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(metrics["coverage"], 0.0)
         self.assertLessEqual(metrics["coverage"], 1.0)
 
+    def test_coverage_counts_unique_reference_clouds_matched_by_samples(self) -> None:
+        samples = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0]],
+                [[10.0, 0.0, 0.0]],
+            ],
+            dtype=torch.float32,
+        )
+        reference = torch.tensor(
+            [
+                [[0.0, 0.0, 0.0]],
+                [[0.1, 0.0, 0.0]],
+                [[10.0, 0.0, 0.0]],
+                [[10.1, 0.0, 0.0]],
+            ],
+            dtype=torch.float32,
+        )
+
+        metrics = point_cloud_distribution_metrics(samples=samples, reference=reference)
+
+        self.assertAlmostEqual(metrics["coverage"], 0.5, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

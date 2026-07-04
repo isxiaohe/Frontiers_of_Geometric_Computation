@@ -33,8 +33,9 @@ def point_cloud_distribution_metrics(samples: torch.Tensor, reference: torch.Ten
         raise ValueError("samples and reference must be non-empty")
     distances = pairwise_chamfer_distances(samples, reference.to(samples.device))
     nearest_sample_for_reference = distances.min(dim=0)
+    nearest_reference_for_sample = distances.min(dim=1)
     mmd_cd = nearest_sample_for_reference.values.mean()
-    coverage = nearest_sample_for_reference.indices.unique().numel() / float(samples.shape[0])
+    coverage = nearest_reference_for_sample.indices.unique().numel() / float(reference.shape[0])
     return {
         "mmd_cd": float(mmd_cd.detach().cpu()),
         "coverage": float(coverage),

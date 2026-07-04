@@ -137,6 +137,56 @@ The Typst template is configured for macOS fonts:
 
 When editing Typst files, compile before claiming the report is fixed.
 
+## Suggested Experiment Plan
+
+This is a course project, so prefer a small, defensible experiment sequence over
+large-scale benchmarking.
+
+1. Verify server setup first.
+   - Recreate `.venv` on the server; do not copy the Mac `.venv`.
+   - Run `scripts/record_env.py` and confirm `torch.cuda.is_available()` is true.
+   - Run the unit tests once before launching long jobs.
+
+2. Run cheap smoke experiments.
+   - Use `scripts/train_generate_primitives.py` with `--targets x0 epsilon v`,
+     small `--steps`, and `--device auto`.
+   - Use `scripts/train_generate_shapenet_category.py` on a tiny chair or
+     airplane subset to verify ShapeNet loading, plotting, and checkpoint output.
+
+3. Run the main controlled synthetic comparison.
+   - Dataset: normalized finite sphere/ellipsoid primitives.
+   - Model: `pvdlite`.
+   - Objective: `flow`.
+   - Targets: `x0`, `epsilon`, and `v`.
+   - Keep seed, dataset size, point count, model size, optimizer, schedule, and
+     sample noise fixed across targets.
+   - Treat OT-flow `epsilon` prediction as a diagnostic/negative case because
+     converting predicted source noise to velocity is ill-conditioned near
+     `t = 0`.
+
+4. Run one ShapeNet single-category demonstration.
+   - Prefer `airplane`, `chair`, or `table`; use `airplane` if visual clarity is
+     more important than category complexity.
+   - Start with `x0` and/or `v` under `flow`; only include `epsilon` if the
+     report explicitly discusses its endpoint-conditioning issue.
+   - Save `summary.json`, generated samples, model weights, and visualization
+     grids under `outputs/`.
+
+5. Before writing final metric claims, fix or audit metric definitions.
+   - Coverage-CD should assign each generated sample to its nearest reference
+     cloud, then divide the number of unique matched references by the reference
+     set size.
+   - For this project, plots and loss curves may carry more weight than absolute
+     benchmark numbers; phrase metrics as lightweight diagnostics unless the
+     implementation is aligned with standard evaluation code.
+
+6. Report scope honestly.
+   - Emphasize that the project tests prediction-target behavior in a controlled
+     3D point-cloud baseline.
+   - Do not claim full parity with PVD or state-of-the-art 3D diffusion methods.
+   - State the exact category, sample count, point count, model size, target,
+     loss mode, scheduler, and hardware used for each result.
+
 ## Implementation Guidelines
 
 - Keep changes scoped. Avoid large rewrites of reference code before there is a
