@@ -1,0 +1,17 @@
+[project]
+name = "fgc3d"
+version = "0.1.0"
+description = "Tiny 3D point-cloud flow-matching baseline for x0, epsilon, and v prediction."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "huggingface_hub>=0.24,<1",
+    "numpy>=1.26,<3",
+    "torch>=2.3,<3",
+]
+
+[project.scripts]
+fgc3d-train-toy = "fgc3d.cli.train_toy:main"
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"

@@ -1,0 +1,27 @@
+{
+  "executable": "/Users/matthew-xh/Study/CS/Frontiers_of_Geometric_Computation/Final_Project/.venv/bin/python",
+  "note": "Local verification snapshot only. Recreate .venv on CUDA machines and refresh this file.",
+  "packages": {
+    "huggingface_hub": "1.10.1",
+    "numpy": "2.2.6",
+    "torch": "2.8.0"
+  },
+  "platform": "macOS-26.3-arm64-arm-64bit",
+  "project": {
+    "base_requirements": "env/requirements-base.txt",
+    "cpu_requirements": "env/requirements-cpu.txt",
+    "cuda_requirements_example": "env/requirements-cuda-cu128.txt",
+    "recommended_device_arg": "cpu",
+    "requires_python": ">=3.11,<3.13",
+    "test_command": "PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v"
+  },
+  "python": "3.12.11",
+  "torch": {
+    "cuda_available": false,
+    "cuda_version": null,
+    "device_count": 0,
+    "devices": [],
+    "mps_available": false,
+    "version": "2.8.0"
+  }
+}
